@@ -1,7 +1,10 @@
+import { Navbar } from "@/components/shared/Navbar"
 
 const Home = () => {
   return (
-    <div>Home</div>
+    <div className="min-h-screen">
+        <Navbar/>
+    </div>
   )
 }
 
