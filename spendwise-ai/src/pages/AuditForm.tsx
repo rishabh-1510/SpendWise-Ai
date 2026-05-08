@@ -1,12 +1,15 @@
 import { Label } from "@/components/ui/label";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Trash2, Sparkles, Check, ArrowRight } from "lucide-react";
+import { Plus, Trash2, Sparkles, Check } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Navbar } from "@/components/shared/Navbar";
 import { Footer } from "@/components/shared/Footer";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { auditSchema, type AuditFormData } from "@/types/auditSchema";
 
 const TOOLS = ["ChatGPT", "Claude", "Cursor", "GitHub Copilot", "Perplexity", "Midjourney", "Notion AI"];
 const PLANS = ["Free", "Plus / Pro", "Team", "Business", "Enterprise"];
@@ -22,9 +25,32 @@ type Row = { tool: string; plan: string; spend: string; seats: string };
 const empty: Row = { tool: "", plan: "", spend: "", seats: "1" };
 
 const AuditForm = () => {
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors },
+  } = useForm<AuditFormData>({
+    resolver: zodResolver(auditSchema),
+    defaultValues:
+      JSON.parse(localStorage.getItem("audit-form") || "null") || {
+        tool: "",
+        plan: "",
+        monthlySpend: 0,
+        seats: 1,
+        teamSize: 1,
+        useCase: "coding",
+      },
+  });
+  const formValues = watch();
+  useEffect(() => {
+    localStorage.setItem(
+      "audit-form",
+      JSON.stringify(formValues)
+    );
+  }, [formValues]);
   const nav = useNavigate();
   const [rows, setRows] = useState<Row[]>([{ ...empty, tool: "ChatGPT", plan: "Team", spend: "240", seats: "8" }]);
-  const [team, setTeam] = useState("12");
   const [useCase, setUseCase] = useState("coding");
   const total = useMemo(() => rows.reduce((s, r) => s + (parseFloat(r.spend) || 0), 0), [rows]);
   const annual = total * 12;
@@ -91,14 +117,23 @@ const AuditForm = () => {
               <h3 className="font-semibold mb-5">About your team</h3>
               <div className="grid gap-4 md:grid-cols-2">
                 <Field label="Total Team Size">
-                  <Input type="number" value={team} onChange={(e) => setTeam(e.target.value)} />
+                  <Input
+                    type="number"
+                    {...register("teamSize")}
+                  />
                 </Field>
                 <Field label="Primary Use Case">
                   <div className="grid grid-cols-4 gap-1.5 p-1 rounded-lg bg-muted/40 border border-border">
                     {USE_CASES.map((u) => (
                       <button
                         key={u.id}
-                        onClick={() => setUseCase(u.id)}
+                        onClick={() => {
+                          setUseCase(u.id);
+                          localStorage.setItem(
+                            "selected-use-case",
+                            u.id
+                          );
+                        }}
                         className={`text-xs py-2 rounded-md transition-all ${useCase === u.id ? "bg-gradient-brand text-primary-foreground shadow-glow" : "text-muted-foreground hover:text-foreground"}`}
                       >
                         {u.label}
@@ -127,7 +162,7 @@ const AuditForm = () => {
                 <li className="flex gap-2"><Check className="h-4 w-4 text-success mt-0.5" /> Seat right-sizing</li>
                 <li className="flex gap-2"><Check className="h-4 w-4 text-success mt-0.5" /> Tool consolidation</li>
               </ul>
-              <Button  className="w-full mt-6 animate-glow-pulse" onClick={() => nav("/report/sample" )}>
+              <Button className="w-full mt-6 animate-glow-pulse" onClick={() => nav("/report/sample")}>
                 <Sparkles className="h-4 w-4" /> Generate Audit
               </Button>
               <Link to="/" className="block mt-3 text-center text-xs text-muted-foreground hover:text-foreground">Back to home</Link>
@@ -135,7 +170,7 @@ const AuditForm = () => {
           </aside>
         </div>
       </div>
-      <Footer/>
+      <Footer />
     </div>
   )
 }
