@@ -17,48 +17,55 @@ Had issues with shadcn import aliases and router setup initially.
 **Plan for tomorrow:**  
 Build audit form and pricing data structure.
 
-## Day 2 — Audit Form + Data Logic — 2026-05-10
+## Day 3 — AI Integration + Dynamic Report System — 2026-05-11
 
-**Hours worked:** 6
+**Hours worked:** 7
 
 **What I did:**  
-- Built the main Audit Form page UI
-- Added dynamic AI tool rows with add/remove functionality
-- Created reusable Field component for cleaner form structure
-- Added pricing and plan selection dropdowns
-- Implemented spend and seat inputs for each AI tool
-- Built real-time annual spend calculation logic
-- Added estimated savings calculation system
-- Created sticky optimization summary sidebar
-- Integrated react-hook-form and zod validation setup
-- Added localStorage auto-save functionality for form persistence
-- Added AI use-case selection system
-- Improved responsive layout and mobile spacing
-- Refined glassmorphism styling, gradients, glow effects, and animations
-- Organized pricing data into reusable TypeScript data structures
+- Built the dynamic Results/Report page UI
+- Connected audit results dynamically using localStorage
+- Implemented reusable audit and pricing utility functions
+- Added dynamic AI spend charts using Recharts
+- Created optimization score and savings calculation system
+- Added recommendation generation through audit engine logic
+- Integrated external AI API for AI-generated audit summaries
+- Added loading states during report generation
+- Built dynamic analytics cards and spend breakdown sections
+- Added support for:
+  - flat pricing
+  - per-seat pricing
+  - usage-based plans
+- Improved localStorage persistence with reusable helper functions
+- Refactored AuditForm logic for cleaner architecture and scalability
+- Improved dashboard responsiveness and spacing
+- Refined report styling, gradients, glow effects, and glassmorphism UI
 
 **What I learned:**  
-- Dynamic multi-row forms are easier to manage with hybrid state management
-- react-hook-form works best when integrated incrementally instead of fully refactoring large components
-- Proper component abstraction reduces repetitive UI code significantly
-- Real-time derived calculations improve UX for financial dashboards
+- Separating pricing and audit logic into reusable utility functions improves scalability
+- Derived financial calculations should be centralized instead of manually synced
+- LocalStorage persistence becomes easier with helper-based architecture
+- AI API integrations require proper endpoint handling and fallback logic
+- Dynamic dashboard systems are easier to maintain with modular reusable components
 
 **Blockers / issues faced:**  
-- Faced TypeScript typing issues with react-hook-form default values
-- Encountered warnings caused by unused form variables during integration
-- Had issues syncing localStorage persistence with dynamic form state
-- Needed to debug button behavior caused by default submit actions
+- Faced Gemini/OpenRouter API integration and endpoint issues
+- Encountered localStorage synchronization problems between pages
+- Had issues handling both flat and per-seat pricing dynamically
+- Faced TypeScript errors caused by audit engine function signature mismatches
+- Recharts data initially failed to render because of inconsistent storage keys
 
 **How I solved them:**  
-- Simplified form architecture by keeping dynamic rows in local component state
-- Added targeted react-hook-form integration only where validation was needed
-- Fixed state synchronization issues with useEffect and watch()
-- Added explicit button types to prevent unintended form submissions
+- Refactored pricing calculations into reusable utility functions
+- Standardized localStorage structure and storage keys
+- Added automatic spend recalculation after every row update
+- Implemented fallback handling for failed AI API responses
+- Updated audit engine parameters and TypeScript typings
+- Debugged chart rendering using browser localStorage inspection tools
 
 **Plan for tomorrow:**  
-- Build results/report page
-- Add optimization recommendation engine
-- Create AI spend analysis charts
-- Implement audit scoring system
-- Generate mock recommendations dynamically
-- Add report sharing functionality
+- Add PDF/download functionality for reports
+- Improve AI recommendation quality
+- Add public report sharing functionality
+- Improve dashboard animations and responsiveness
+- Refine analytics charts and visualization system
+- Perform final project cleanup and optimization
