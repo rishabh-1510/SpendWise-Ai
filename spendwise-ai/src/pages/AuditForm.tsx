@@ -1,13 +1,8 @@
 import { Label } from "@/components/ui/label";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  Plus,
-  Trash2,
-  Sparkles,
-  Check,
-} from "lucide-react";
-
+import { Plus, Trash2, Sparkles, Check } from "lucide-react";
+import { generateAISummary } from "@/services/aiSummary";
 import {
   Select,
   SelectContent,
@@ -15,152 +10,142 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
 import { Navbar } from "@/components/shared/Navbar";
 import { Footer } from "@/components/shared/Footer";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-
-import {
-  auditSchema,
-  type AuditFormData,
-} from "@/types/auditSchema";
-
 import { runAudit } from "@/utils/auditEngine";
-import { pricingData } from "@/data/pricing";
+import {
+  pricingData,
+  getSelectablePlans,
+  calculateMonthlyCost,
+} from "@/data/pricing";
 
-/* -------------------------------- */
-/* Dynamic Data */
-/* -------------------------------- */
+/* ─────────────────────────────────────── */
+/* Constants                               */
+/* ─────────────────────────────────────── */
 
-const TOOLS = pricingData.map(
-  (tool) => tool.tool
-);
-
-const getPlansForTool = (
-  toolName: string
-) => {
-  const tool = pricingData.find(
-    (t) => t.tool === toolName
-  );
-
-  return tool?.plans || [];
-};
-
-/* -------------------------------- */
-/* Use Cases */
-/* -------------------------------- */
+const TOOLS = pricingData.map((t) => t.tool);
 
 const USE_CASES = [
-  { id: "coding", label: "Coding" },
-  { id: "writing", label: "Writing" },
+  { id: "coding",   label: "Coding"   },
+  { id: "writing",  label: "Writing"  },
   { id: "research", label: "Research" },
-  { id: "mixed", label: "Mixed" },
-];
+  { id: "mixed",    label: "Mixed"    },
+] as const;
 
-/* -------------------------------- */
-/* Types */
-/* -------------------------------- */
+type UseCase = (typeof USE_CASES)[number]["id"];
+
+/* ─────────────────────────────────────── */
+/* Row type                                */
+/* ─────────────────────────────────────── */
 
 type Row = {
-  tool: string;
-  plan: string;
-  spend: string;
-  seats: string;
+  tool:  string;
+  plan:  string;
+  seats: number;
+  /** null = usage-based / custom — displayed as "Usage-based" */
+  spend: number | null;
 };
 
-const empty: Row = {
-  tool: "",
-  plan: "",
-  spend: "",
-  seats: "1",
+const emptyRow = (): Row => ({ tool: "", plan: "", seats: 1, spend: null });
+
+/* ─────────────────────────────────────── */
+/* Persistence                             */
+/* ─────────────────────────────────────── */
+
+const STORAGE_KEY = "audit-form-v2";
+
+type PersistedState = {
+  rows:     Row[];
+  useCase:  UseCase;
+  teamSize: number;
 };
 
-/* -------------------------------- */
-/* Component */
-/* -------------------------------- */
+function loadState(): PersistedState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as PersistedState;
+  } catch {
+    // ignore malformed data
+  }
+  return { rows: [emptyRow()], useCase: "coding", teamSize: 1 };
+}
+
+function saveState(state: PersistedState) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+/* ─────────────────────────────────────── */
+/* Spend calculation                       */
+/* ─────────────────────────────────────── */
+
+function computeSpend(row: Row): number | null {
+  const plan = getSelectablePlans(row.tool).find((p) => p.name === row.plan);
+  if (!plan) return null;
+  return calculateMonthlyCost(plan, row.seats);
+}
+
+/* ─────────────────────────────────────── */
+/* Component                               */
+/* ─────────────────────────────────────── */
 
 const AuditForm = () => {
-  const { register, watch } =
-    useForm<AuditFormData>({
-      resolver: zodResolver(auditSchema),
-
-      defaultValues:
-        JSON.parse(
-          localStorage.getItem(
-            "audit-form"
-          ) || "null"
-        ) || {
-          tool: "",
-          plan: "",
-          monthlySpend: 0,
-          seats: 1,
-          teamSize: 1,
-          useCase: "coding",
-        },
-    });
-
-  const formValues = watch();
-
-  useEffect(() => {
-    localStorage.setItem(
-      "audit-form",
-      JSON.stringify(formValues)
-    );
-  }, [formValues]);
-
   const nav = useNavigate();
 
-  const [rows, setRows] = useState<Row[]>(
-    [{ ...empty }]
-  );
+  // useState lazy initializer — loadState() runs exactly once, not on every render
+  const [rows,     setRows    ] = useState<Row[]>        (() => loadState().rows);
+  const [useCase,  setUseCase ] = useState<UseCase>      (() => loadState().useCase);
+  const [teamSize, setTeamSize] = useState<number>       (() => loadState().teamSize);
+  const [loading,  setLoading ] = useState(false);
 
-  const [useCase, setUseCase] =
-    useState("coding");
+  /* Persist on every change */
+  useEffect(() => {
+    saveState({ rows, useCase, teamSize });
+  }, [rows, useCase, teamSize]);
 
-  /* -------------------------------- */
-  /* Calculations */
-  /* -------------------------------- */
+  /* ── Row helpers ── */
 
-  const total = useMemo(
-    () =>
-      rows.reduce(
-        (s, r) =>
-          s +
-          (parseFloat(r.spend) || 0),
-        0
-      ),
-    [rows]
-  );
-
-  const annual = total * 12;
-
-  const estSavings = Math.round(
-    annual * 0.28
-  );
-
-  /* -------------------------------- */
-  /* Update Row */
-  /* -------------------------------- */
-
-  const update = (
-    i: number,
-    patch: Partial<Row>
-  ) =>
-    setRows((r) =>
-      r.map((row, idx) =>
-        idx === i
-          ? { ...row, ...patch }
-          : row
-      )
+  const updateRow = (i: number, patch: Partial<Row>) =>
+    setRows((prev) =>
+      prev.map((row, idx) => {
+        if (idx !== i) return row;
+        const next = { ...row, ...patch };
+        return { ...next, spend: computeSpend(next) };
+      })
     );
 
-  /* -------------------------------- */
-  /* Render */
-  /* -------------------------------- */
+  const addRow    = () => setRows((r) => [...r, emptyRow()]);
+  const removeRow = (i: number) => setRows((r) => r.filter((_, idx) => idx !== i));
+
+  /* ── Live audit for sidebar figures ──
+     Runs the real engine so the sidebar always agrees with the report.
+     useMemo keeps it from re-running on unrelated state changes.        */
+  const liveAudit = useMemo(
+    () => runAudit(rows, useCase, teamSize),
+    [rows, useCase, teamSize]
+  );
+
+  /* ── Submit ── */
+
+  const handleGenerate = async () => {
+    if (!rows.some((r) => r.tool && r.plan)) return;
+
+    setLoading(true);
+    try {
+      // Re-use the already-computed result rather than running the engine twice
+      const summary = await generateAISummary(liveAudit);
+      localStorage.setItem(
+        "audit-results",
+        JSON.stringify({ ...liveAudit, summary })
+      );
+      nav("/results");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ── Render ── */
 
   return (
     <div className="min-h-screen">
@@ -172,243 +157,174 @@ const AuditForm = () => {
           <p className="text-xs uppercase tracking-widest text-muted-foreground">
             Step 1 of 1
           </p>
-
           <h1 className="mt-2 text-4xl md:text-5xl font-semibold tracking-tight">
             Tell us about your{" "}
-            <span className="text-gradient-brand">
-              AI stack
-            </span>
+            <span className="text-gradient-brand">AI stack</span>
           </h1>
-
           <p className="mt-3 text-muted-foreground max-w-xl">
-            Add the tools your team
-            pays for. We'll find
-            inefficiencies, plan
-            mismatches, and optimization
-            opportunities.
+            Add the tools your team pays for. We'll find inefficiencies, plan
+            mismatches, and optimization opportunities.
           </p>
         </div>
 
         {/* Main Grid */}
         <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
-          {/* -------------------------------- */}
-          {/* Form */}
-          {/* -------------------------------- */}
 
+          {/* ── Tool Rows ── */}
           <div className="space-y-6">
-            {rows.map((row, i) => (
-              <div
-                key={i}
-                className="glass glow-border rounded-2xl p-6 animate-fade-up"
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between mb-5">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <span className="h-6 w-6 rounded-md bg-gradient-brand flex items-center justify-center text-xs">
-                      {i + 1}
-                    </span>
+            {rows.map((row, i) => {
+              const plans       = getSelectablePlans(row.tool);
+              const selectedPlan = plans.find((p) => p.name === row.plan);
+              const isPerSeat   = selectedPlan?.perSeat ?? false;
 
-                    Tool #{i + 1}
-                  </h3>
+              return (
+                <div
+                  key={i}
+                  className="glass glow-border rounded-2xl p-6 animate-fade-up"
+                >
+                  {/* Card header */}
+                  <div className="flex items-center justify-between mb-5">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <span className="h-6 w-6 rounded-md bg-gradient-brand flex items-center justify-center text-xs">
+                        {i + 1}
+                      </span>
+                      Tool #{i + 1}
+                    </h3>
+                    {rows.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeRow(i)}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
 
-                  {rows.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setRows((r) =>
-                          r.filter(
-                            (_, idx) =>
-                              idx !== i
-                          )
-                        )
-                      }
-                      className="text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                  {/* Fields */}
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {/* Tool */}
+                    <Field label="AI Tool">
+                      <Select
+                        value={row.tool}
+                        onValueChange={(v) =>
+                          updateRow(i, { tool: v, plan: "", seats: 1, spend: null })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select tool" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TOOLS.map((t) => (
+                            <SelectItem key={t} value={t}>{t}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+
+                    {/* Plan */}
+                    <Field label="Current Plan">
+                      <Select
+                        value={row.plan}
+                        disabled={!row.tool}
+                        onValueChange={(v) => updateRow(i, { plan: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={row.tool ? "Select plan" : "Select a tool first"}
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {plans.map((p) => (
+                            <SelectItem key={p.name} value={p.name}>
+                              {p.name}
+                              {p.price !== null
+                                ? ` — $${p.price}${p.perSeat ? "/seat" : ""}/mo`
+                                : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+
+                    {/* Seats — per-seat plans only */}
+                    {isPerSeat && (
+                      <Field label="Team Seats">
+                        <Input
+                          type="number"
+                          min={1}
+                          value={row.seats}
+                          onChange={(e) =>
+                            updateRow(i, {
+                              seats: Math.max(1, parseInt(e.target.value) || 1),
+                            })
+                          }
+                          placeholder="e.g. 8"
+                        />
+                      </Field>
+                    )}
+
+                    {/* Monthly Spend (read-only, computed) */}
+                    <Field label="Monthly Spend (USD)">
+                      <Input
+                        readOnly
+                        value={
+                          row.spend !== null
+                            ? `$${row.spend.toLocaleString()}`
+                            : row.plan
+                            ? "Usage-based"
+                            : ""
+                        }
+                        placeholder="Select a plan"
+                        className="text-foreground font-medium"
+                      />
+                    </Field>
+                  </div>
+
+                  {/* Plan notes */}
+                  {selectedPlan?.notes && (
+                    <p className="mt-3 text-xs text-muted-foreground italic">
+                      ℹ {selectedPlan.notes}
+                    </p>
                   )}
                 </div>
+              );
+            })}
 
-                {/* Fields */}
-                <div className="grid gap-4 md:grid-cols-2">
-                  {/* Tool */}
-                  <Field label="AI Tool">
-                    <Select
-                      value={row.tool}
-                      onValueChange={(v) =>
-                        update(i, {
-                          tool: v,
-                          plan: "",
-                          spend: "",
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select tool" />
-                      </SelectTrigger>
-
-                      <SelectContent>
-                        {TOOLS.map((t) => (
-                          <SelectItem
-                            key={t}
-                            value={t}
-                          >
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-
-                  {/* Plan */}
-                  <Field label="Current Plan">
-                    <Select
-                      value={row.plan}
-                      onValueChange={(v) => {
-                        const selectedPlan =
-                          getPlansForTool(
-                            row.tool
-                          ).find(
-                            (p) =>
-                              p.name === v
-                          );
-
-                        const monthlyPrice =
-                          (selectedPlan?.price ||
-                            0) *
-                          Number(
-                            row.seats || 1
-                          );
-
-                        update(i, {
-                          plan: v,
-                          spend:
-                            String(
-                              monthlyPrice
-                            ),
-                        });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select plan" />
-                      </SelectTrigger>
-
-                      <SelectContent>
-                        {getPlansForTool(
-                          row.tool
-                        ).map((plan) => (
-                          <SelectItem
-                            key={plan.name}
-                            value={plan.name}
-                          >
-                            {plan.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-
-                  {/* Spend */}
-                  <Field label="Monthly Spend (USD)">
-                    <Input
-                      type="number"
-                      value={row.spend}
-                      readOnly
-                    />
-                  </Field>
-
-                  {/* Seats */}
-                  <Field label="Team Seats">
-                    <Input
-                      type="number"
-                      value={row.seats}
-                      onChange={(e) => {
-                        const seats =
-                          e.target.value;
-
-                        const selectedPlan =
-                          getPlansForTool(
-                            row.tool
-                          ).find(
-                            (p) =>
-                              p.name ===
-                              row.plan
-                          );
-
-                        const monthlyPrice =
-                          (selectedPlan?.price ||
-                            0) *
-                          Number(
-                            seats || 1
-                          );
-
-                        update(i, {
-                          seats,
-                          spend:
-                            String(
-                              monthlyPrice
-                            ),
-                        });
-                      }}
-                      placeholder="8"
-                    />
-                  </Field>
-                </div>
-              </div>
-            ))}
-
-            {/* Add Tool */}
+            {/* Add tool */}
             <button
               type="button"
-              onClick={() =>
-                setRows((r) => [
-                  ...r,
-                  { ...empty },
-                ])
-              }
+              onClick={addRow}
               className="w-full glass rounded-2xl py-5 flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground hover:bg-white/[0.03] transition-colors border-dashed"
             >
               <Plus className="h-4 w-4" />
               Add another tool
             </button>
 
-            {/* Team Info */}
+            {/* Team info */}
             <div className="glass rounded-2xl p-6">
-              <h3 className="font-semibold mb-5">
-                About your team
-              </h3>
+              <h3 className="font-semibold mb-5">About your team</h3>
 
               <div className="grid gap-4 md:grid-cols-2">
-                {/* Team Size */}
                 <Field label="Total Team Size">
                   <Input
                     type="number"
-                    {...register(
-                      "teamSize",
-                      {
-                        valueAsNumber: true,
-                      }
-                    )}
+                    min={1}
+                    value={teamSize}
+                    onChange={(e) =>
+                      setTeamSize(Math.max(1, parseInt(e.target.value) || 1))
+                    }
+                    placeholder="e.g. 24"
                   />
                 </Field>
 
-                {/* Use Case */}
                 <Field label="Primary Use Case">
                   <div className="grid grid-cols-4 gap-1.5 p-1 rounded-lg bg-muted/40 border border-border">
                     {USE_CASES.map((u) => (
                       <button
                         type="button"
                         key={u.id}
-                        onClick={() => {
-                          setUseCase(
-                            u.id
-                          );
-
-                          localStorage.setItem(
-                            "selected-use-case",
-                            u.id
-                          );
-                        }}
+                        onClick={() => setUseCase(u.id)}
                         className={`text-xs py-2 rounded-md transition-all ${
                           useCase === u.id
                             ? "bg-gradient-brand text-primary-foreground shadow-glow"
@@ -424,49 +340,63 @@ const AuditForm = () => {
             </div>
           </div>
 
-          {/* -------------------------------- */}
-          {/* Sidebar */}
-          {/* -------------------------------- */}
-
+          {/* ── Sidebar ── */}
           <aside className="lg:sticky lg:top-24 h-fit space-y-4">
             <div className="glass-strong glow-border rounded-2xl p-6">
+              {/* Auto-save indicator */}
               <div className="flex items-center gap-2 text-xs text-success">
                 <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
                 Auto-saving
               </div>
 
+              {/* Annual spend — from live audit */}
               <p className="mt-4 text-xs text-muted-foreground uppercase tracking-wider">
                 Estimated annual spend
               </p>
-
               <p className="mt-1 text-4xl font-semibold tracking-tight">
-                $
-                {annual.toLocaleString()}
+                ${liveAudit.totalAnnual.toLocaleString()}
               </p>
 
+              {/* Optimization score */}
+              <div className="mt-3 flex items-center gap-3">
+                <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-brand transition-all duration-700"
+                    style={{ width: `${liveAudit.score}%` }}
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {liveAudit.score}/100
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">Optimization score</p>
+
+              {/* Savings — from live audit engine, not a heuristic */}
               <div className="mt-6 p-4 rounded-xl bg-success/10 border border-success/20">
                 <p className="text-xs text-success uppercase tracking-wider">
                   Potential savings
                 </p>
-
                 <p className="mt-1 text-2xl font-semibold text-success">
-                  $
-                  {estSavings.toLocaleString()}
-                  /yr
+                  ${liveAudit.savingsAnnual.toLocaleString()}/yr
                 </p>
+                {liveAudit.recommendations.length > 0 && (
+                  <p className="mt-1 text-xs text-success/70">
+                    {liveAudit.recommendations.length} issue
+                    {liveAudit.recommendations.length !== 1 ? "s" : ""} found
+                  </p>
+                )}
               </div>
 
+              {/* Feature list */}
               <ul className="mt-6 space-y-2 text-sm text-muted-foreground">
                 <li className="flex gap-2">
                   <Check className="h-4 w-4 text-success mt-0.5" />
                   Plan-tier optimization
                 </li>
-
                 <li className="flex gap-2">
                   <Check className="h-4 w-4 text-success mt-0.5" />
                   Seat right-sizing
                 </li>
-
                 <li className="flex gap-2">
                   <Check className="h-4 w-4 text-success mt-0.5" />
                   Tool consolidation
@@ -476,22 +406,20 @@ const AuditForm = () => {
               {/* Generate */}
               <Button
                 className="w-full mt-6 animate-glow-pulse"
-                onClick={() => {
-                  const result =
-                    runAudit(rows);
-
-                  localStorage.setItem(
-                    "audit-results",
-                    JSON.stringify(
-                      result
-                    )
-                  );
-
-                  nav("/report/sample");
-                }}
+                disabled={loading || !rows.some((r) => r.tool && r.plan)}
+                onClick={handleGenerate}
               >
-                <Sparkles className="h-4 w-4" />
-                Generate Audit
+                {loading ? (
+                  <>
+                    <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                    Generating…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Generate Audit
+                  </>
+                )}
               </Button>
 
               <Link
@@ -512,9 +440,9 @@ const AuditForm = () => {
 
 export default AuditForm;
 
-/* -------------------------------- */
-/* Reusable Field */
-/* -------------------------------- */
+/* ─────────────────────────────────────── */
+/* Field wrapper                           */
+/* ─────────────────────────────────────── */
 
 function Field({
   label,
@@ -528,7 +456,6 @@ function Field({
       <Label className="text-xs uppercase tracking-wider text-muted-foreground">
         {label}
       </Label>
-
       {children}
     </div>
   );
