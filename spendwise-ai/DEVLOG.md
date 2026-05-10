@@ -69,3 +69,56 @@ Build audit form and pricing data structure.
 - Improve dashboard animations and responsiveness
 - Refine analytics charts and visualization system
 - Perform final project cleanup and optimization
+
+## Day 4 — PDF Export + Backend Integration — 2026-05-12
+
+**Hours worked:** 6
+
+**What I did:**  
+- Integrated PDF export functionality using:
+  - `jspdf`
+  - `html2canvas`
+- Added downloadable AI audit report generation
+- Implemented report capture using React refs
+- Connected download actions to report dashboard buttons
+- Refactored report export logic into reusable utility structure
+- Added AI Summary Card component for cleaner report presentation
+- Started backend integration using Supabase
+- Configured Supabase client setup and environment variables
+- Created backend project structure for lead storage
+- Added Supabase utility configuration file
+- Improved report component architecture and export handling
+- Fixed PDF rendering issues caused by unsupported `oklch()` colors
+- Converted chart and export-related styles to compatible HEX colors
+- Improved Recharts rendering consistency for exported reports
+- Refined report UI spacing, button behavior, and dashboard layout
+- Performed general cleanup and code organization
+
+**What I learned:**  
+- Browser-based PDF generation libraries have limitations with modern CSS color functions
+- `html2canvas` works best with HEX/RGB colors instead of `oklch()`
+- Separating export logic into reusable utilities improves maintainability
+- Supabase provides a lightweight backend solution without requiring a custom Express server
+- Environment variable management is critical when integrating external services
+
+**Blockers / issues faced:**  
+- PDF generation initially failed because `html2canvas` could not parse `oklch()` colors
+- Faced rendering inconsistencies in exported chart visuals
+- Had issues configuring proper export capture area with React refs
+- Encountered problems with button event placement and JSX structure during export integration
+- Needed to debug Supabase project configuration and API setup
+
+**How I solved them:**  
+- Replaced unsupported `oklch()` chart/export colors with HEX values
+- Refactored PDF generation into a dedicated handler function
+- Used `useRef()` to capture the report container correctly
+- Fixed JSX structure and moved click handlers to proper button components
+- Configured reusable Supabase client setup with environment variables
+
+**Plan for tomorrow:**  
+- Complete Supabase lead storage integration
+- Add shareable public report functionality
+- Improve report export styling and pagination
+- Add toast notifications and loading states
+- Finalize responsive dashboard polish
+- Perform final testing and project optimization
