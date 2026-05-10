@@ -1,5 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+
 import {
   Bar,
   BarChart,
@@ -24,6 +27,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { AuditResult, Recommendation } from "@/utils/auditEngine";
+import { AISummaryCard } from "./AiSummaryCard";
+import { patchOklchVars } from "@/utils/pdfExport";
 
 /* ─────────────────────────────────────── */
 /* Types                                   */
@@ -37,20 +42,20 @@ type StoredResult = AuditResult & { summary?: string };
 
 // Deterministic palette — no Math.random(), no flicker
 const CHART_COLORS = [
-  "oklch(0.70 0.22 270)",
-  "oklch(0.72 0.18 155)",
-  "oklch(0.72 0.20 55)",
-  "oklch(0.70 0.20 320)",
-  "oklch(0.68 0.18 200)",
-  "oklch(0.70 0.16 30)",
-  "oklch(0.72 0.20 100)",
-  "oklch(0.68 0.18 240)",
+  "#8b5cf6",
+  "#22c55e",
+  "#facc15",
+  "#ec4899",
+  "#38bdf8",
+  "#f97316",
+  "#84cc16",
+  "#6366f1",
 ];
 
 const PRIORITY_META = {
-  high:   { label: "High",   className: "text-destructive bg-destructive/10 border-destructive/20" },
-  medium: { label: "Medium", className: "text-amber-400  bg-amber-400/10  border-amber-400/20"    },
-  low:    { label: "Low",    className: "text-muted-foreground bg-muted/40 border-border"          },
+  high: { label: "High", className: "text-destructive bg-destructive/10 border-destructive/20" },
+  medium: { label: "Medium", className: "text-amber-400  bg-amber-400/10  border-amber-400/20" },
+  low: { label: "Low", className: "text-muted-foreground bg-muted/40 border-border" },
 } as const;
 
 /* ─────────────────────────────────────── */
@@ -76,10 +81,43 @@ function loadAuditResult(): StoredResult | null {
 
 export function ReportContent({ shared = false }: { shared?: boolean }) {
   const nav = useNavigate();
-
+  const reportRef = useRef<HTMLDivElement>(null);
   // Read inside the component so navigation back + re-render picks up fresh data
   const audit = useMemo(loadAuditResult, []);
+  // In ReportContent.tsx
 
+  const handleDownloadReport = async () => {
+    if (!reportRef.current) return;
+
+    // 1. Patch CSS vars BEFORE html2canvas reads anything
+    const patch = patchOklchVars();
+
+    // 2. Flush styles — give the browser one frame to apply them
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+    try {
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#0f1117",
+        logging: false,
+        foreignObjectRendering: false,
+        ignoreElements: (el) =>
+          el.tagName === "IFRAME" || el.id === "__pdf-patch__",
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: "a4" });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save("spendwise-audit-report.pdf");
+
+    } finally {
+      // 3. Always clean up, even on error
+      patch.remove();
+    }
+  };
   // Empty state — no valid data in storage
   if (!audit) {
     return (
@@ -110,7 +148,7 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
   // Bar chart: current annual spend vs. optimized
   const optimizedAnnual = Math.max(0, totalAnnual - savingsAnnual);
   const comparisonData = [
-    { label: "Current",   value: totalAnnual    },
+    { label: "Current", value: totalAnnual },
     { label: "Optimized", value: optimizedAnnual },
   ];
 
@@ -124,9 +162,9 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
       return rows
         .filter((r) => r.tool && r.spend !== null && r.spend > 0)
         .map((r, i) => ({
-          name:  r.tool,
+          name: r.tool,
           value: r.spend as number,
-          fill:  CHART_COLORS[i % CHART_COLORS.length],
+          fill: CHART_COLORS[i % CHART_COLORS.length],
         }));
     } catch {
       return [];
@@ -136,39 +174,41 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
   /* ── Render ── */
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-12 space-y-8">
+    <div ref={reportRef} >
+      <div className="mx-auto max-w-6xl px-6 py-12 space-y-8">
 
-      {/* ── Header ── */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">
-            {shared ? "Public Audit Report" : "Audit Results"}
-          </p>
-          <h1 className="mt-2 text-4xl md:text-5xl font-semibold tracking-tight">
-            AI Spend Audit Report
-          </h1>
-          <p className="mt-2 text-muted-foreground text-sm">
-            {recommendations.length} optimization{" "}
-            {recommendations.length !== 1 ? "opportunities" : "opportunity"} detected
-          </p>
-        </div>
-
-        {!shared && (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="glass">
-              <ArrowDownToLine className="h-4 w-4" />
-              Download
-            </Button>
-            <Button variant="glass">
-              <Share2 className="h-4 w-4" />
-              Share
-            </Button>
-            <Button variant="hero">
-              <Calendar className="h-4 w-4" />
-              Book consultation
-            </Button>
+        {/* ── Header ── */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              {shared ? "Public Audit Report" : "Audit Results"}
+            </p>
+            <h1 className="mt-2 text-4xl md:text-5xl font-semibold tracking-tight">
+              AI Spend Audit Report
+            </h1>
+            <p className="mt-2 text-muted-foreground text-sm">
+              {recommendations.length} optimization{" "}
+              {recommendations.length !== 1 ? "opportunities" : "opportunity"} detected
+            </p>
           </div>
-        )}
+
+          {!shared && (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="glass" onClick={handleDownloadReport}>
+                <ArrowDownToLine className="h-4 w-4" />
+                Download
+              </Button>
+              <Button variant="glass">
+                <Share2 className="h-4 w-4" />
+                Share
+              </Button>
+              <Button variant="hero">
+                <Calendar className="h-4 w-4" />
+                Book consultation
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Hero banner ── */}
@@ -239,36 +279,36 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
               <BarChart data={comparisonData} barSize={56}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="oklch(0.28 0.03 265 / 0.4)"
+                  stroke="#8b5cf6"
                   vertical={false}
                 />
                 <XAxis
                   dataKey="label"
-                  stroke="oklch(0.6 0.02 260)"
+                  stroke="#8b5cf6"
                   fontSize={12}
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis
-                  stroke="oklch(0.6 0.02 260)"
+                  stroke="#8b5cf6"
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={(v) => `$${(v as number).toLocaleString()}`}
                 />
                 <Tooltip
-                  cursor={{ fill: "oklch(0.28 0.03 265 / 0.3)" }}
+                  cursor={{ fill:  "rgba(139, 92, 246, 0.3)" }}
                   contentStyle={{
-                    background: "oklch(0.18 0.025 270)",
-                    border: "1px solid oklch(0.28 0.03 265)",
+                    background: "#1e1b2e",
+                    border: "1px solid #312e81",
                     borderRadius: 12,
                     fontSize: 12,
                   }}
                   formatter={(v) => [`$${(v as number).toLocaleString()}`, "Annual spend"]}
                 />
                 <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                  <Cell fill="oklch(0.65 0.22 270)" />
-                  <Cell fill="oklch(0.72 0.18 155)" />
+                  <Cell fill="#8b5cf6" />
+                  <Cell fill="#22c55e" />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -277,11 +317,11 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
           {/* Manual legend since we use Cell not two Bar keys */}
           <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-[oklch(0.65_0.22_270)]" />
+              <span className="h-2 w-2 rounded-full bg-violet-500" />
               Current (${totalAnnual.toLocaleString()}/yr)
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-[oklch(0.72_0.18_155)]" />
+              <span className="h-2 w-2 rounded-full bg-green-500" />
               Optimized (${optimizedAnnual.toLocaleString()}/yr)
             </span>
           </div>
@@ -311,8 +351,8 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
                     </Pie>
                     <Tooltip
                       contentStyle={{
-                        background: "oklch(0.18 0.025 270)",
-                        border: "1px solid oklch(0.28 0.03 265)",
+                        background: "#1e1b2e",
+                        border: "1px solid #312e81",
                         borderRadius: 12,
                         fontSize: 12,
                       }}
@@ -341,17 +381,15 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
       </div>
 
       {/* ── AI Summary ── */}
-      {summary && (
-        <div className="glass glow-border rounded-2xl p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="h-7 w-7 rounded-lg bg-gradient-brand flex items-center justify-center">
-              <Sparkles className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <h3 className="font-semibold">AI-Generated Summary</h3>
-          </div>
-          <p className="text-foreground/85 leading-relaxed">{summary}</p>
-        </div>
-      )}
+      {
+        summary && (
+          <AISummaryCard
+            summary={summary}
+            generatedAt={new Date().toLocaleTimeString()}
+            model="Gemini 2.5 Flash"
+          />
+        )
+      }
 
       {/* ── Recommendations table ── */}
       <div className="glass rounded-2xl overflow-hidden">
@@ -437,22 +475,24 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
       </div>
 
       {/* ── Footer actions ── */}
-      {!shared && (
-        <div className="flex flex-wrap gap-3 justify-center pt-4">
-          <Button variant="glass" size="lg">
-            <ArrowDownToLine className="h-4 w-4" />
-            Download Report
-          </Button>
-          <Button variant="glass" size="lg">
-            <Share2 className="h-4 w-4" />
-            Share Audit
-          </Button>
-          <Button variant="hero" size="lg">
-            <Calendar className="h-4 w-4" />
-            Book Consultation
-          </Button>
-        </div>
-      )}
+      {
+        !shared && (
+          <div className="flex flex-wrap gap-3 justify-center pt-4">
+            <Button variant="glass" size="lg" onClick={handleDownloadReport}>
+              <ArrowDownToLine className="h-4 w-4" />
+              Download Report
+            </Button>
+            <Button variant="glass" size="lg" >
+              <Share2 className="h-4 w-4" />
+              Share Audit
+            </Button>
+            <Button variant="hero" size="lg">
+              <Calendar className="h-4 w-4" />
+              Book Consultation
+            </Button>
+          </div>
+        )
+      }
     </div>
   );
 }
