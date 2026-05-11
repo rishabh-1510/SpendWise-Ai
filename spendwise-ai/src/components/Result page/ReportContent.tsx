@@ -2,7 +2,7 @@ import { useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-
+import domtoimage from "dom-to-image-more";
 import {
   Bar,
   BarChart,
@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import type { AuditResult, Recommendation } from "@/utils/auditEngine";
 import { AISummaryCard } from "./AiSummaryCard";
-import { patchOklchVars } from "@/utils/pdfExport";
+
 
 /* ─────────────────────────────────────── */
 /* Types                                   */
@@ -89,33 +89,123 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
   const handleDownloadReport = async () => {
     if (!reportRef.current) return;
 
-    // 1. Patch CSS vars BEFORE html2canvas reads anything
-    const patch = patchOklchVars();
+    const A4_WIDTH_PX = 794;
+    const scale = 3;
+    const node = reportRef.current;
 
-    // 2. Flush styles — give the browser one frame to apply them
-    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    // 1. Clone into a hidden off-screen container — never touch the live DOM
+    const container = document.createElement("div");
+    container.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: -9999px;
+    width: ${A4_WIDTH_PX}px;
+    min-width: ${A4_WIDTH_PX}px;
+    max-width: ${A4_WIDTH_PX}px;
+    overflow: visible;
+    z-index: -1;
+    pointer-events: none;
+  `;
+
+    const clone = node.cloneNode(true) as HTMLElement;
+    clone.style.width = `${A4_WIDTH_PX}px`;
+    clone.style.minWidth = `${A4_WIDTH_PX}px`;
+    clone.style.maxWidth = `${A4_WIDTH_PX}px`;
+    clone.style.overflow = "visible";
+
+    container.appendChild(clone);
+    document.body.appendChild(container);
+
+    // 2. Wait for reflow so scrollHeight is accurate
+    await new Promise((res) => setTimeout(res, 150));
+
+    const captureWidth = A4_WIDTH_PX * scale;
+    const captureHeight = container.scrollHeight * scale;
 
     try {
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#0f1117",
-        logging: false,
-        foreignObjectRendering: false,
-        ignoreElements: (el) =>
-          el.tagName === "IFRAME" || el.id === "__pdf-patch__",
+      const dataUrl = await domtoimage.toPng(container, {
+        width: captureWidth,
+        height: captureHeight,
+        style: {
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+          width: `${A4_WIDTH_PX}px`,
+          height: `${container.scrollHeight}px`,
+        },
+        cacheBust: true,
+        filter: (el: Element) => {
+          if (!(el instanceof HTMLElement)) return true;
+
+          const computed = getComputedStyle(el);
+
+          // Kill backdrop blur
+          el.style.backdropFilter = "none";
+          (el.style as any).webkitBackdropFilter = "none";
+
+          // Solid backgrounds in place of glass/translucent
+          const bg = computed.backgroundColor;
+          if (
+            bg === "rgba(0, 0, 0, 0)" ||
+            bg === "transparent" ||
+            bg.includes("oklch")
+          ) {
+            el.style.backgroundColor = "#0f172a";
+          }
+          if (computed.background.includes("gradient")) {
+            el.style.backgroundImage = "none";
+            el.style.backgroundColor = "#1e293b";
+          }
+
+          // Fix gradient text
+          if (
+            el.classList.contains("text-gradient-brand") ||
+            (computed.webkitTextFillColor !== "" &&
+              computed.webkitTextFillColor !== "rgba(0, 0, 0, 0)")
+          ) {
+            el.style.backgroundImage = "none";
+            el.style.backgroundClip = "unset";
+            (el.style as any).webkitBackgroundClip = "unset";
+            (el.style as any).webkitTextFillColor = "#a78bfa";
+            el.style.color = "#a78bfa";
+          }
+
+          // Fix oklch borders and text
+          if (computed.borderColor.includes("oklch")) {
+            el.style.borderColor = "#334155";
+          }
+          if (computed.color.includes("oklch")) {
+            el.style.color = "#e2e8f0";
+          }
+
+          return true;
+        },
       });
 
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: "a4" });
+      // 3. Build PDF
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "px",
+        format: "a4",
+        hotfixes: ["px_scaling"],
+      });
+
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgHeight = (captureHeight / captureWidth) * pdfWidth;
+      const totalPages = Math.ceil(imgHeight / pdfHeight);
+
+      for (let i = 0; i < totalPages; i++) {
+        if (i > 0) pdf.addPage();
+        pdf.addImage(dataUrl, "PNG", 0, -(i * pdfHeight), pdfWidth, imgHeight);
+      }
+
       pdf.save("spendwise-audit-report.pdf");
 
+    } catch (error) {
+      console.error("PDF export failed:", error);
     } finally {
-      // 3. Always clean up, even on error
-      patch.remove();
+      // 4. Remove the off-screen clone — live DOM was never touched
+      document.body.removeChild(container);
     }
   };
   // Empty state — no valid data in storage
@@ -297,7 +387,7 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
                   tickFormatter={(v) => `$${(v as number).toLocaleString()}`}
                 />
                 <Tooltip
-                  cursor={{ fill:  "rgba(139, 92, 246, 0.3)" }}
+                  cursor={{ fill: "rgba(139, 92, 246, 0.3)" }}
                   contentStyle={{
                     background: "#1e1b2e",
                     border: "1px solid #312e81",

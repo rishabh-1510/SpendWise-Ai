@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Plus, Trash2, Sparkles, Check } from "lucide-react";
 import { generateAISummary } from "@/services/aiSummary";
+import { saveLead } from "@/services/saveLead";
 import {
   Select,
   SelectContent,
@@ -28,10 +29,10 @@ import {
 const TOOLS = pricingData.map((t) => t.tool);
 
 const USE_CASES = [
-  { id: "coding",   label: "Coding"   },
-  { id: "writing",  label: "Writing"  },
+  { id: "coding", label: "Coding" },
+  { id: "writing", label: "Writing" },
   { id: "research", label: "Research" },
-  { id: "mixed",    label: "Mixed"    },
+  { id: "mixed", label: "Mixed" },
 ] as const;
 
 type UseCase = (typeof USE_CASES)[number]["id"];
@@ -41,8 +42,8 @@ type UseCase = (typeof USE_CASES)[number]["id"];
 /* ─────────────────────────────────────── */
 
 type Row = {
-  tool:  string;
-  plan:  string;
+  tool: string;
+  plan: string;
   seats: number;
   /** null = usage-based / custom — displayed as "Usage-based" */
   spend: number | null;
@@ -57,8 +58,8 @@ const emptyRow = (): Row => ({ tool: "", plan: "", seats: 1, spend: null });
 const STORAGE_KEY = "audit-form-v2";
 
 type PersistedState = {
-  rows:     Row[];
-  useCase:  UseCase;
+  rows: Row[];
+  useCase: UseCase;
   teamSize: number;
 };
 
@@ -94,11 +95,13 @@ const AuditForm = () => {
   const nav = useNavigate();
 
   // useState lazy initializer — loadState() runs exactly once, not on every render
-  const [rows,     setRows    ] = useState<Row[]>        (() => loadState().rows);
-  const [useCase,  setUseCase ] = useState<UseCase>      (() => loadState().useCase);
-  const [teamSize, setTeamSize] = useState<number>       (() => loadState().teamSize);
-  const [loading,  setLoading ] = useState(false);
-
+  const [rows, setRows] = useState<Row[]>(() => loadState().rows);
+  const [useCase, setUseCase] = useState<UseCase>(() => loadState().useCase);
+  const [teamSize, setTeamSize] = useState<number>(() => loadState().teamSize);
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [company, setCompany] = useState("");
+  const [role, setRole] = useState("");
   /* Persist on every change */
   useEffect(() => {
     saveState({ rows, useCase, teamSize });
@@ -115,7 +118,7 @@ const AuditForm = () => {
       })
     );
 
-  const addRow    = () => setRows((r) => [...r, emptyRow()]);
+  const addRow = () => setRows((r) => [...r, emptyRow()]);
   const removeRow = (i: number) => setRows((r) => r.filter((_, idx) => idx !== i));
 
   /* ── Live audit for sidebar figures ──
@@ -135,10 +138,19 @@ const AuditForm = () => {
     try {
       // Re-use the already-computed result rather than running the engine twice
       const summary = await generateAISummary(liveAudit);
+      await saveLead({
+        email,
+        company,
+        role,
+        teamSize,
+        savings:
+          liveAudit.savingsAnnual,
+      });
       localStorage.setItem(
         "audit-results",
         JSON.stringify({ ...liveAudit, summary })
       );
+
       nav("/results");
     } finally {
       setLoading(false);
@@ -173,9 +185,9 @@ const AuditForm = () => {
           {/* ── Tool Rows ── */}
           <div className="space-y-6">
             {rows.map((row, i) => {
-              const plans       = getSelectablePlans(row.tool);
+              const plans = getSelectablePlans(row.tool);
               const selectedPlan = plans.find((p) => p.name === row.plan);
-              const isPerSeat   = selectedPlan?.perSeat ?? false;
+              const isPerSeat = selectedPlan?.perSeat ?? false;
 
               return (
                 <div
@@ -272,8 +284,8 @@ const AuditForm = () => {
                           row.spend !== null
                             ? `$${row.spend.toLocaleString()}`
                             : row.plan
-                            ? "Usage-based"
-                            : ""
+                              ? "Usage-based"
+                              : ""
                         }
                         placeholder="Select a plan"
                         className="text-foreground font-medium"
@@ -306,6 +318,36 @@ const AuditForm = () => {
               <h3 className="font-semibold mb-5">About your team</h3>
 
               <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Work Email">
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) =>
+                      setEmail(e.target.value)
+                    }
+                    placeholder="you@company.com"
+                  />
+                </Field>
+
+                <Field label="Company">
+                  <Input
+                    value={company}
+                    onChange={(e) =>
+                      setCompany(e.target.value)
+                    }
+                    placeholder="Acme Inc."
+                  />
+                </Field>
+
+                <Field label="Role">
+                  <Input
+                    value={role}
+                    onChange={(e) =>
+                      setRole(e.target.value)
+                    }
+                    placeholder="Engineering Manager"
+                  />
+                </Field>
                 <Field label="Total Team Size">
                   <Input
                     type="number"
@@ -325,11 +367,10 @@ const AuditForm = () => {
                         type="button"
                         key={u.id}
                         onClick={() => setUseCase(u.id)}
-                        className={`text-xs py-2 rounded-md transition-all ${
-                          useCase === u.id
-                            ? "bg-gradient-brand text-primary-foreground shadow-glow"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
+                        className={`text-xs py-2 rounded-md transition-all ${useCase === u.id
+                          ? "bg-gradient-brand text-primary-foreground shadow-glow"
+                          : "text-muted-foreground hover:text-foreground"
+                          }`}
                       >
                         {u.label}
                       </button>
