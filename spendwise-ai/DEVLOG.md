@@ -122,3 +122,66 @@ Build audit form and pricing data structure.
 - Add toast notifications and loading states
 - Finalize responsive dashboard polish
 - Perform final testing and project optimization
+
+## Day 5 — Backend Storage + PDF Export Stabilization — 2026-05-13
+
+**Hours worked:** 7
+
+**What I did:**  
+- Integrated Supabase database storage into the project
+- Created backend lead storage architecture using Supabase tables
+- Configured Supabase environment variables and reusable client setup
+- Added lead capture flow during audit generation
+- Implemented persistent storage for:
+  - email
+  - company
+  - role
+  - team size
+  - estimated savings
+- Added reusable `saveLead()` backend service function
+- Connected frontend audit workflow with backend database insertion
+- Configured Row Level Security (RLS) handling in Supabase
+- Successfully stored real audit leads inside backend database
+- Improved report export system using:
+  - `jspdf`
+  - `html2canvas`
+- Refactored PDF export into reusable handler architecture
+- Implemented React ref-based report capture system
+- Fixed multiple PDF export failures caused by unsupported `oklch()` CSS colors
+- Replaced problematic export styles with safe HEX-based rendering
+- Added cloned DOM rendering strategy for stable PDF generation
+- Removed problematic glassmorphism and gradient rendering during export
+- Improved report rendering consistency and export reliability
+- Refined dashboard buttons, spacing, and export interactions
+- Performed cleanup and restructuring of report component logic
+
+**What I learned:**  
+- Supabase provides a fast and lightweight backend solution for SaaS prototypes
+- Row Level Security (RLS) policies directly affect frontend database operations
+- Browser-based PDF generation libraries have limitations with modern CSS features
+- Tailwind v4 and `oklch()` colors can create compatibility issues with canvas-based rendering tools
+- Cloning and sanitizing DOM elements is an effective workaround for export rendering issues
+- Separating backend services into reusable modules improves scalability and maintainability
+
+**Blockers / issues faced:**  
+- Supabase insert requests initially failed because of RLS policy restrictions
+- PDF export repeatedly failed due to unsupported `oklch()` color parsing
+- Glassmorphism and gradient styles caused rendering issues inside `html2canvas`
+- Faced compatibility issues between Tailwind v4 styling and export libraries
+- Needed to debug frontend-to-backend integration and database permissions
+
+**How I solved them:**  
+- Disabled/adjusted RLS policies for development-stage backend integration
+- Replaced unsupported export-related styles with HEX-based fallbacks
+- Implemented cloned DOM export rendering instead of direct component rendering
+- Removed problematic gradients, shadows, and backdrop filters during export generation
+- Refactored backend insertion logic into reusable service functions
+- Verified backend inserts directly through Supabase Table Editor
+
+**Plan for tomorrow:**  
+- Add shareable public report functionality
+- Improve report export pagination and styling
+- Add toast notifications and loading states
+- Finalize responsive design improvements
+- Perform final testing and bug fixing
+- Prepare project documentation and deployment
