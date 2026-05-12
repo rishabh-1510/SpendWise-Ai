@@ -329,7 +329,7 @@ export function runAudit(
   validRows.forEach((row) => {
     const tool = pricingData.find((t) => t.tool === row.tool);
     if (!tool) return;
-
+    if (!pricingData.some((t) => t.tool === row.tool)) return;
     const allPlans    = getSelectablePlans(row.tool);
     const currentPlan = allPlans.find((p) => p.name === row.plan);
     if (!currentPlan) return;
