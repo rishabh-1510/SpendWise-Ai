@@ -170,7 +170,7 @@ function ruleHighSpend(
  */
 function ruleCheaperPlanAvailable(
   row: ToolRow,
-  spend: number,
+  _spend: number,
   currentPlan: ToolPlan,
   allPlans: ToolPlan[],
   recs: Recommendation[],
@@ -179,7 +179,7 @@ function ruleCheaperPlanAvailable(
   const alt = cheaperAlternative(allPlans, currentPlan);
   if (!alt || alt.price === null) return;
 
-  const altSpend       = calculateMonthlyCost(alt, row.seats) ?? 0;
+  const altSpend= calculateMonthlyCost(alt, row.seats) ?? 0;
   const savingsMonthly = Math.max(0, Math.round(spend - altSpend));
   if (savingsMonthly === 0) return;
 

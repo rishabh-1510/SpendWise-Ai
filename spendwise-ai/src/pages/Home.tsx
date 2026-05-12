@@ -2,7 +2,7 @@ import { Footer } from "@/components/shared/Footer"
 import { Navbar } from "@/components/shared/Navbar"
 import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
-import { BarChart3, Sparkles, Users, Share2, ArrowRight, Check, Star } from "lucide-react"
+import { BarChart3, Sparkles, Users, Share2, ArrowRight, Check } from "lucide-react"
 import { DashboardPreview } from "@/components/homepage/DashboardPreview"
 
 const features = [
