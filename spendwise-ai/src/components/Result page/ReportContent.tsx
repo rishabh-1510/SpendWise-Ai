@@ -27,9 +27,9 @@ const CHART_COLORS = [
 ];
 
 const PRIORITY_META = {
-  high:   { label: "High",   className: "text-destructive bg-destructive/10 border-destructive/20" },
-  medium: { label: "Medium", className: "text-amber-400  bg-amber-400/10  border-amber-400/20"    },
-  low:    { label: "Low",    className: "text-muted-foreground bg-muted/40 border-border"          },
+  high: { label: "High", className: "text-destructive bg-destructive/10 border-destructive/20" },
+  medium: { label: "Medium", className: "text-amber-400  bg-amber-400/10  border-amber-400/20" },
+  low: { label: "Low", className: "text-muted-foreground bg-muted/40 border-border" },
 } as const;
 
 const URL_SIZE_WARN = 6_000; // bytes — warn before hitting browser limits
@@ -73,9 +73,9 @@ function loadFromStorage(): StoredResult | null {
  * Returns { url, tooBig } where tooBig flags if the URL exceeds URL_SIZE_WARN.
  */
 function buildShareUrl(audit: StoredResult): { url: string; tooBig: boolean } {
-  const json    = JSON.stringify(audit);
+  const json = JSON.stringify(audit);
   const encoded = encodeURIComponent(btoa(json));
-  const url     = `${window.location.origin}${window.location.pathname}?data=${encoded}`;
+  const url = `${window.location.origin}/report?data=${encoded}`;
   return { url, tooBig: url.length > URL_SIZE_WARN };
 }
 
@@ -123,15 +123,15 @@ function ShareButton({ audit }: { audit: StoredResult }) {
   };
 
   const label =
-    state === "copying" ? "Copying…"     :
-    state === "copied"  ? "Link copied!" :
-    state === "error"   ? "Copy failed"  :
-    "Share";
+    state === "copying" ? "Copying…" :
+      state === "copied" ? "Link copied!" :
+        state === "error" ? "Copy failed" :
+          "Share";
 
   const icon =
-    state === "copied" ? <Check  className="h-4 w-4" /> :
-    state === "error"  ? <Copy   className="h-4 w-4" /> :
-                         <Share2 className="h-4 w-4" />;
+    state === "copied" ? <Check className="h-4 w-4" /> :
+      state === "error" ? <Copy className="h-4 w-4" /> :
+        <Share2 className="h-4 w-4" />;
 
   return (
     <Button
@@ -140,7 +140,7 @@ function ShareButton({ audit }: { audit: StoredResult }) {
       disabled={state === "copying"}
       className={
         state === "copied" ? "text-success border-success/30" :
-        state === "error"  ? "text-destructive border-destructive/30" : ""
+          state === "error" ? "text-destructive border-destructive/30" : ""
       }
     >
       {icon}
@@ -154,9 +154,9 @@ function ShareButton({ audit }: { audit: StoredResult }) {
 /* ─────────────────────────────────────── */
 
 export function ReportContent({ shared = false }: { shared?: boolean }) {
-  const nav           = useNavigate();
+  const nav = useNavigate();
   const [searchParams] = useSearchParams();
-  const reportRef     = useRef<HTMLDivElement>(null);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   // Shared view reads from URL; owner view reads from localStorage
   const audit = useMemo(
@@ -168,20 +168,20 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
   const handleDownloadReport = async () => {
     if (!reportRef.current) return;
     const { default: domtoimage } = await import("dom-to-image-more");
-    const { default: jsPDF }      = await import("jspdf");
+    const { default: jsPDF } = await import("jspdf");
 
     const A4_WIDTH_PX = 794;
-    const scale       = 3;
-    const node        = reportRef.current;
+    const scale = 3;
+    const node = reportRef.current;
 
-    const container       = document.createElement("div");
+    const container = document.createElement("div");
     container.style.cssText = `
       position:fixed;top:0;left:-9999px;
       width:${A4_WIDTH_PX}px;min-width:${A4_WIDTH_PX}px;max-width:${A4_WIDTH_PX}px;
       overflow:visible;z-index:-1;pointer-events:none;
     `;
-    const clone         = node.cloneNode(true) as HTMLElement;
-    clone.style.width   = `${A4_WIDTH_PX}px`;
+    const clone = node.cloneNode(true) as HTMLElement;
+    clone.style.width = `${A4_WIDTH_PX}px`;
     clone.style.minWidth = `${A4_WIDTH_PX}px`;
     clone.style.maxWidth = `${A4_WIDTH_PX}px`;
     clone.style.overflow = "visible";
@@ -189,7 +189,7 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
     document.body.appendChild(container);
     await new Promise((res) => setTimeout(res, 150));
 
-    const captureWidth  = A4_WIDTH_PX * scale;
+    const captureWidth = A4_WIDTH_PX * scale;
     const captureHeight = container.scrollHeight * scale;
 
     try {
@@ -221,13 +221,13 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
             el.style.color = "#a78bfa";
           }
           if (s.borderColor.includes("oklch")) el.style.borderColor = "#334155";
-          if (s.color.includes("oklch"))        el.style.color       = "#e2e8f0";
+          if (s.color.includes("oklch")) el.style.color = "#e2e8f0";
           return true;
         },
       });
 
-      const pdf       = new jsPDF({ orientation: "portrait", unit: "px", format: "a4", hotfixes: ["px_scaling"] });
-      const pdfWidth  = pdf.internal.pageSize.getWidth();
+      const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: "a4", hotfixes: ["px_scaling"] });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
       const imgHeight = (captureHeight / captureWidth) * pdfWidth;
       const totalPages = Math.ceil(imgHeight / pdfHeight);
@@ -270,8 +270,8 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
 
   /* ── Chart data ── */
   const optimizedAnnual = Math.max(0, totalAnnual - savingsAnnual);
-  const comparisonData  = [
-    { label: "Current",   value: totalAnnual    },
+  const comparisonData = [
+    { label: "Current", value: totalAnnual },
     { label: "Optimized", value: optimizedAnnual },
   ];
 
@@ -372,10 +372,10 @@ export function ReportContent({ shared = false }: { shared?: boolean }) {
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <MetricCard label="Optimization score" value={`${score}`}                                sub="/100"    />
-              <MetricCard label="Potential savings"  value={`$${savingsAnnual.toLocaleString()}`}     sub="/year"   accent="success" />
-              <MetricCard label="Recommendations"    value={`${recommendations.length}`}              sub="detected" />
-              <MetricCard label="Monthly spend"      value={`$${totalMonthly.toLocaleString()}`}      sub="/month"  />
+              <MetricCard label="Optimization score" value={`${score}`} sub="/100" />
+              <MetricCard label="Potential savings" value={`$${savingsAnnual.toLocaleString()}`} sub="/year" accent="success" />
+              <MetricCard label="Recommendations" value={`${recommendations.length}`} sub="detected" />
+              <MetricCard label="Monthly spend" value={`$${totalMonthly.toLocaleString()}`} sub="/month" />
             </div>
           </div>
         </div>
