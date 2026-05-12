@@ -288,7 +288,6 @@ function ruleUseCaseMismatch(
  */
 function ruleSeatCountExceedsTeam(
   row: ToolRow,
-  spend: number,
   teamSize: number,
   currentPlan: ToolPlan,
   recs: Recommendation[],
@@ -329,7 +328,7 @@ export function runAudit(
   validRows.forEach((row) => {
     const tool = pricingData.find((t) => t.tool === row.tool);
     if (!tool) return;
-    if (!pricingData.some((t) => t.tool === row.tool)) return;
+
     const allPlans    = getSelectablePlans(row.tool);
     const currentPlan = allPlans.find((p) => p.name === row.plan);
     if (!currentPlan) return;
@@ -340,7 +339,7 @@ export function runAudit(
     ruleTeamPlanUnderused   (row, spend, recommendations, penalties);
     ruleHighSpend           (row, spend, recommendations, penalties);
     ruleCheaperPlanAvailable(row, spend, currentPlan, allPlans, recommendations, penalties);
-    ruleSeatCountExceedsTeam(row, spend, teamSize, currentPlan, recommendations, penalties);
+    ruleSeatCountExceedsTeam(row, teamSize, currentPlan, recommendations, penalties);
   });
 
   // Cross-row rules
