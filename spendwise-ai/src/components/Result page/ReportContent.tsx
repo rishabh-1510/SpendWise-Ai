@@ -6,8 +6,7 @@ import {
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowDownToLine, Calendar, Share2, Check,
-  Sparkles, TrendingDown, Zap, AlertTriangle, Copy,
+  ArrowDownToLine, Calendar, Share2, Check,TrendingDown, Zap, AlertTriangle, Copy,
 } from "lucide-react";
 import type { AuditResult, Recommendation } from "@/utils/auditEngine";
 import { AISummaryCard } from "./AiSummaryCard";
