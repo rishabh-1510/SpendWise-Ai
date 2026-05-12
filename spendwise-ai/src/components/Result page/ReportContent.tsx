@@ -64,7 +64,7 @@ function loadFromStorage(): StoredResult | null {
     if (typeof parsed.score !== "number") return null;
     return parsed;
   } catch {
-    return null;
+    return null ;
   }
 }
 
