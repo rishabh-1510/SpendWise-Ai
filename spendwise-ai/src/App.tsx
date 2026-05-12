@@ -12,7 +12,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/audit" element={<AuditForm />} />
         <Route path="/results" element={<Results />} />
-        <Route path="/report/:id" element={<SharedReport />} />
+        <Route path="/report" element={<SharedReport />} />
       </Routes>
     </BrowserRouter>
   )
